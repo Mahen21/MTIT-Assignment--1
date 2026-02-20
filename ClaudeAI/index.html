@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SmartBudget – AI-Powered Budget Tracker</title>
+  <link rel="stylesheet" href="css/styles.css"/>
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">💰 SmartBudget</div>
+    <div class="header-meta">
+      <span id="current-month">Loading...</span>
+      <button id="reset-btn" class="btn btn-danger-sm">Reset</button>
+    </div>
+  </header>
+
+  <main class="app-container">
+
+    <!-- Summary Cards -->
+    <section class="summary-cards">
+      <div class="card card-income">
+        <div class="card-label">Total Income</div>
+        <div class="card-value" id="total-income">LKR 0.00</div>
+      </div>
+      <div class="card card-expense">
+        <div class="card-label">Total Expenses</div>
+        <div class="card-value" id="total-expense">LKR 0.00</div>
+      </div>
+      <div class="card card-balance">
+        <div class="card-label">Balance</div>
+        <div class="card-value" id="balance">LKR 0.00</div>
+      </div>
+      <div class="card card-savings">
+        <div class="card-label">Savings Rate</div>
+        <div class="card-value" id="savings-rate">0%</div>
+      </div>
+    </section>
+
+    <!-- Add Transaction -->
+    <section class="section-add">
+      <h2 class="section-title">Add Transaction</h2>
+      <div class="form-row">
+        <input type="text" id="tx-desc" placeholder="Description (e.g. Grocery)" />
+        <input type="number" id="tx-amount" placeholder="Amount (LKR)" min="0"/>
+        <select id="tx-category">
+          <option value="Food">🍔 Food</option>
+          <option value="Transport">🚌 Transport</option>
+          <option value="Utilities">💡 Utilities</option>
+          <option value="Entertainment">🎬 Entertainment</option>
+          <option value="Health">🏥 Health</option>
+          <option value="Shopping">🛍️ Shopping</option>
+          <option value="Salary" >💼 Salary</option>
+          <option value="Other">📦 Other</option>
+        </select>
+        <select id="tx-type">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+        <button id="add-tx-btn" class="btn btn-primary">+ Add</button>
+      </div>
+    </section>
+
+    <!-- Charts & Breakdown -->
+    <section class="section-charts">
+      <div class="chart-container">
+        <h3>Category Breakdown</h3>
+        <canvas id="category-chart" width="300" height="300"></canvas>
+      </div>
+      <div class="alerts-container">
+        <h3>⚠️ Spending Alerts</h3>
+        <div id="alerts-list">
+          <p class="muted">No alerts. Stay on track!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Transactions -->
+    <section class="section-transactions">
+      <h2 class="section-title">Transactions</h2>
+      <div id="tx-list">
+        <p class="muted">No transactions yet. Add one above!</p>
+      </div>
+    </section>
+
+    <!-- AI Feedback Panel -->
+    <section class="section-ai">
+      <h2 class="section-title">🤖 AI Financial Advisor</h2>
+      <button id="get-advice-btn" class="btn btn-ai">Analyze My Spending</button>
+      <div id="ai-feedback" class="ai-box">
+        <p class="muted">Click "Analyze My Spending" to get personalized AI insights.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="scripts/scripts.js"></script>
+</body>
+</html>

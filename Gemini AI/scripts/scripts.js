@@ -1,0 +1,293 @@
+"use strict";
+
+class GeminiTracker {
+    constructor() {
+        this.storageKey = 'gemini_vault';
+        // ISSUE: localStorage can throw an error if disabled or full (e.g., in Incognito mode)
+        // FIX: Wrap initialization in a try-catch block to prevent app crash
+        try {
+            this.transactions = JSON.parse(localStorage.getItem(this.storageKey) || '[]');
+        } catch (e) {
+            console.error('Failed to load transactions:', e);
+            this.transactions = []; // Fallback to empty array
+        }
+        
+        this.limits = { Food: 500, Transport: 200, Entertainment: 300, Utilities: 400 };
+        this.categories = ['Food','Transport','Entertainment','Utilities','Shopping','Health','Income','Other'];
+        this.chart = null;
+        // expose instance for other UI scripts
+        window.geminiTracker = this;
+        this.init();
+    }
+
+    init() {
+        this.form = document.getElementById('budget-form');
+        this.canvas = document.getElementById('budgetChart');
+        this.txList = document.getElementById('tx-list');
+        this.balanceDisplay = document.getElementById('total-balance');
+        this.catSelect = document.getElementById('cat');
+
+        // populate categories if select exists
+        if (this.catSelect) {
+            this.catSelect.innerHTML = this.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        if (this.form) this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+
+        // AI advisor controls
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const analyzeLiveBtn = document.getElementById('analyze-live-btn');
+        const clearAiBtn = document.getElementById('clear-ai-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const aiPrompt = document.getElementById('ai-prompt');
+        this.aiOutput = document.getElementById('ai-output');
+
+        if (analyzeBtn) analyzeBtn.addEventListener('click', () => this.handleAnalyze(aiPrompt && aiPrompt.value));
+        if (analyzeLiveBtn) analyzeLiveBtn.addEventListener('click', () => this.handleAnalyze(null, true));
+        if (clearAiBtn) clearAiBtn.addEventListener('click', () => { if (this.aiOutput) this.aiOutput.textContent = 'Analysis will appear here.'; if (aiPrompt) aiPrompt.value = ''; });
+        if (resetBtn) resetBtn.addEventListener('click', () => { if (confirm('Reset all transactions? This cannot be undone.')) this.resetAll(); });
+
+        // Render initial UI
+        this.render();
+    }
+
+    handleSubmit(e) {
+        e.preventDefault();
+        const descEl = document.getElementById('desc');
+        const amtEl = document.getElementById('amt');
+        const catEl = document.getElementById('cat');
+        if (!descEl || !amtEl || !catEl) return;
+
+        const desc = descEl.value.trim();
+        let amount = parseFloat(amtEl.value);
+        const category = catEl.value || 'Other';
+
+        // Normalize sign: Income category => positive, others => negative (expense)
+        if (category === 'Income') amount = Math.abs(amount);
+        else amount = -Math.abs(amount);
+
+        // Validation - Critical for data integrity and UX
+        if (!desc) { alert('Please enter a description.'); return; }
+        if (isNaN(amount)) { alert('Enter a valid amount.'); return; }
+        // Prevent storing zero amounts which clutter data
+        if (Math.abs(amount) === 0) { alert('Amount must be non-zero.'); return; }
+        // Prevent unrealistically large numbers
+        if (Math.abs(amount) > 10000000) { alert('Amount seems too large.'); return; }
+
+        // Sanitize `desc` to prevent XSS (Cross-Site Scripting)
+        const safeDesc = this._escape(desc);
+
+        const tx = { id: this._id(), desc: safeDesc, amount, category, ts: Date.now() };
+        this.transactions.push(tx);
+        
+        // PERSIST: Save to localStorage immediately
+        this._sync();
+
+        // reset inputs
+        descEl.value = '';
+        amtEl.value = '';
+        catEl.value = 'Food';
+    }
+
+    updateChart() {
+        const canvas = this.canvas;
+        if (!canvas) return;
+
+        // Ensure Chart.js present
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js not loaded');
+            return;
+        }
+
+        // ISSUE: High-DPI displays (like retina) cause blurry canvas rendering
+        // FIX: Scale canvas dimensions by devicePixelRatio
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        
+        // Only set width/height if not already set correctly to avoid infinite loops/flicker
+        if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            // Scale context to match
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+        }
+
+        // Build category totals from negative amounts (expenses)
+        const dataMap = this.transactions.reduce((acc, t) => {
+            if (t.amount < 0) acc[t.category] = (acc[t.category] || 0) + Math.abs(t.amount);
+            return acc;
+        }, {});
+
+        const labels = Object.keys(dataMap);
+        const values = Object.values(dataMap);
+
+        // Destroy previous chart
+        if (this.chart) {
+            try { this.chart.destroy(); } catch (e) { /* ignore */ }
+            this.chart = null;
+        }
+
+        // Placeholder when no data
+        if (!labels.length || values.every(v => v === 0)) {
+            const ctx = canvas.getContext('2d');
+            // Clear entire canvas (account for DPI scaling)
+            ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+            
+            ctx.fillStyle = '#e8eef9';
+            const cx = rect.width / 2, cy = rect.height / 2, r = Math.min(rect.width, rect.height) * 0.28;
+            ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#6b7280'; ctx.font = '13px Arial'; ctx.textAlign = 'center'; ctx.fillText('No expense data', cx, cy + 4);
+            return;
+        }
+
+        // Create pie chart
+        this.chart = new Chart(canvas.getContext('2d'), {
+            type: 'pie',
+            data: { labels, datasets: [{ data: values, backgroundColor: ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#8B5CF6'] }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+
+    updateAIAdvisor() {
+        const container = document.getElementById('ai-feedback-container');
+        if (!container) return;
+
+        const income = this.transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+        const expense = this.transactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+        const savingsRate = income > 0 ? (((income - expense) / income) * 100).toFixed(1) : 0;
+
+        const categoryTotals = this.transactions.filter(t => t.amount < 0).reduce((acc, t) => {
+            acc[t.category] = (acc[t.category] || 0) + Math.abs(t.amount); return acc;
+        }, {});
+
+        const topCategory = Object.keys(categoryTotals).length ? Object.keys(categoryTotals).reduce((a, b) => categoryTotals[a] > categoryTotals[b] ? a : b) : 'N/A';
+        const overBudget = Object.keys(categoryTotals).filter(cat => categoryTotals[cat] > (this.limits[cat] || Infinity));
+
+        if (this.transactions.length === 0) { container.innerHTML = '<p class="muted">No transactions to analyze yet.</p>'; return; }
+
+        const summary = savingsRate > 20 ? `Strong performance with a ${savingsRate}% savings rate.` : `Your ${savingsRate}% savings rate is tight; cash flow needs optimization.`;
+
+        const suggestions = `
+            <span class="performance-summary">${summary}</span>
+            <ul class="improvement-list">
+                <li>Review <strong>${topCategory}</strong>—it's your highest drain.</li>
+                ${overBudget.length > 0 ? `<li>Cut <strong>${overBudget.join(', ')}</strong> immediately to stop over-budget leaks.</li>` : `<li>Maintain current pace to hit your yearly goals.</li>`}
+            </ul>
+        `;
+
+        container.innerHTML = suggestions;
+    }
+
+    handleAnalyze(userPrompt = '', live = false) {
+        // AI SIMULATION:
+        // Analyzes spending patterns using rule-based heuristics to mimic AI feedback.
+        // In a real app, this would send data to an LLM API.
+        
+        const tx = this.transactions.slice().reverse();
+        const total = this.transactions.reduce((s, t) => s + t.amount, 0);
+        const income = tx.filter(t => t.amount > 0).reduce((s,n)=>s+n.amount,0);
+        const expense = tx.filter(t => t.amount < 0).reduce((s,n)=>s+Math.abs(n.amount),0);
+
+        // Calculate top spending categories
+        const catMap = {};
+        tx.forEach(t => { catMap[t.category] = (catMap[t.category] || 0) + Math.abs(t.amount); });
+        const topCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+        // Generate response string
+        let out = '';
+        out += `Balance: $${Math.abs(total).toFixed(2)}. `;
+        out += `Recent ${tx.length} transaction(s): income $${income.toFixed(2)}, expenses $${expense.toFixed(2)}. `;
+        if (topCats.length) out += 'Top categories: ' + topCats.map(([c,v])=>`${c} $${v.toFixed(2)}`).join(', ') + '. ';
+        
+        // Handle "Live" vs user prompt modes
+        if (live) out += 'Live analysis generated from current ledger. ';
+        else if (userPrompt) out += `Prompt: ${this._escape(userPrompt)}. `;
+        else out += 'No prompt provided. ';
+
+        // Simple heuristic for financial advice
+        if (expense > income && expense > 0) out += 'Suggestion: reduce spending on your largest categories by 10%.';
+        else out += 'Suggestion: cashflow looks healthy; consider allocating surplus to savings.';
+
+        if (this.aiOutput) this.aiOutput.textContent = out;
+        return out;
+    }
+
+    render() {
+        // Balance
+        const total = this.transactions.reduce((s, t) => s + t.amount, 0);
+        if (this.balanceDisplay) this.balanceDisplay.textContent = `$${total.toFixed(2)}`;
+
+        // Transactions list
+        if (this.txList) {
+            this.txList.innerHTML = '';
+            this.transactions.slice().reverse().forEach(t => {
+                const li = document.createElement('li');
+                li.className = `tx-item ${t.amount < 0 ? 'minus' : 'plus'}`;
+                li.innerHTML = `
+                    <span class="tx-desc">${t.desc} <small class="tx-cat">(${t.category})</small></span>
+                    <div class="tx-meta">
+                        <strong>${t.amount.toFixed(2)}</strong>
+                        <button class="btn tx-delete" data-id="${t.id}">Delete</button>
+                    </div>
+                `;
+                this.txList.appendChild(li);
+
+                // attach delete handler
+                const del = li.querySelector('.tx-delete');
+                if (del) del.addEventListener('click', (ev) => {
+                    const id = ev.currentTarget.getAttribute('data-id');
+                    if (id && confirm('Delete this transaction?')) this.deleteTransaction(id);
+                });
+            });
+        }
+
+        // Charts and AI
+        this.updateChart();
+        this.updateAIAdvisor();
+    }
+
+    _sync() {
+        // PERSISTENCE: Save state to localStorage. Wrapped in try-catch in case of quota limits.
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.transactions));
+        } catch (e) {
+            console.error('Failed to save transactions:', e);
+            alert('Warning: Could not save data to local storage.');
+        }
+        this.render();
+    }
+
+    deleteTransaction(id) {
+        // Immutability pattern: Create new array excluding the target ID
+        const before = this.transactions.length;
+        this.transactions = this.transactions.filter(t => t.id !== id);
+        
+        // Only re-render if something actually changed
+        if (this.transactions.length === before) return; 
+        this._sync();
+    }
+
+    resetAll() {
+        this.transactions = [];
+        localStorage.removeItem(this.storageKey);
+        this.render();
+    }
+
+    _id() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+    
+    // SECURITY: Prevents XSS by escaping HTML characters
+    // Converts string to text node, then reads innerHTML to get escaped entity string
+    _escape(s) { 
+        const d = document.createElement('div'); 
+        d.appendChild(document.createTextNode(s)); 
+        return d.innerHTML; 
+    }
+}
+
+// Init
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => new GeminiTracker());
+} else {
+    new GeminiTracker();
+}

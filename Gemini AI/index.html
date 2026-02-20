@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini AI | SmartBudget Tracker</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <h1>Smart Budget Tracker </span></h1>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <label>Total Balance</label>
+                    <h2 id="total-balance">$0.00</h2>
+                </div>
+                <div class="stat-card" id="alert-indicator">
+                    <label>Status</label>
+                    <h2 id="status-text">Healthy</h2>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="reset-btn" class="btn">Reset Data</button>
+            </div>
+        </header>
+
+        <section class="visuals">
+            <div class="chart-wrapper glass-panel">
+                <canvas id="budgetChart"></canvas>
+            </div>
+        </section>
+
+        <section class="action-center">
+            <form id="budget-form" class="glass-panel">
+                <div class="input-row">
+                    <input type="text" id="desc" placeholder="Expense description" required>
+                    <input type="number" id="amt" step="0.01" placeholder="Amount (+/-)" required>
+                    <select id="cat">
+                        <option value="Food">Food</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Entertainment">Entertainment</option>
+                        <option value="Utilities">Utilities</option>
+                        <option value="Income">Income</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Record Transaction</button>
+            </form>
+        </section>
+
+        <section class="history glass-panel">
+            <h3>Transaction Ledger</h3>
+            <ul id="tx-list"></ul>
+        </section>
+                <div class="ai-advisor">
+                    <h3>AI Advisor</h3>
+                    <div class="ai-controls">
+                        <textarea id="ai-prompt" placeholder="Ask for budget tips, savings suggestions, or category insights..." rows="3"></textarea>
+                        <div class="ai-actions">
+                            <button id="analyze-btn" class="btn">Analyze</button>
+                            <button id="analyze-live-btn" class="btn btn-primary">Analyze Live</button>
+                            <button id="clear-ai-btn" class="btn">Clear</button>
+                        </div>
+                    </div>
+                    <div id="ai-output" class="ai-output">Analysis will appear here.</div>
+                </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="scripts/scripts.js"></script>
+</body>
+</html>
